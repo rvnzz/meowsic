@@ -8,7 +8,8 @@ use gpui_kit::component::{
     h_flex, v_flex,
 };
 
-use gpui_kit::{AnyElement, Context, FontWeight, Pixels, Subscription, Window, div, px, size};
+use gpui_kit::base::ScrollableMask;
+use gpui_kit::{AnyElement, Axis, Context, FontWeight, Pixels, Subscription, Window, div, px, size};
 use gpui_kit::prelude::*;
 use crate::ui::widgets::{Cover, StatusBanner, TrackRow, empty_hint, fmt_count};
 use crate::yandex::{AlbumBriefDto,TrackDto};
@@ -448,17 +449,34 @@ impl Render for ListPage {
             let long = tracks_len > 30;
             self.long_list = long;
             let list: AnyElement = if long {
-                v_virtual_list(
-                    entity,
-                    "list-tracks",
-                    sizes,
-                    move |view: &mut ListPage, range, _window, cx| {
-                        range.map(|ix| view.render_track(ix, cx)).collect()
-                    },
-                )
-                .flex_1()
-                .min_h_0()
-                .into_any_element()
+                // VirtualList двигает только свой scroll handle: колесо мыши
+                // над ним ловит ScrollableMask, как у component-скроллов.
+                let mask_label = data.title.clone();
+                div()
+                    .relative()
+                    .w_full()
+                    .flex_1()
+                    .min_h_0()
+                    .child(
+                        v_virtual_list(
+                            entity,
+                            "list-tracks",
+                            sizes,
+                            move |view: &mut ListPage, range, _window, cx| {
+                                range.map(|ix| view.render_track(ix, cx)).collect()
+                            },
+                        )
+                        .track_scroll(&self.scroll)
+                        .size_full()
+                        .min_h_0(),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .child(ScrollableMask::new(Axis::Vertical, &self.scroll).id(format!("list-mask-{mask_label}"))),
+                    )
+                    .into_any_element()
             } else {
                 v_flex().gap_1().children((0..tracks_len).map(|ix| self.render_track_static(ix, cx))).into_any_element()
             };
