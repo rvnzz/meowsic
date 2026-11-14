@@ -14,7 +14,7 @@ use crate::store::Store;
 
 fn main() {
     gpui_kit::application()
-        .with_assets(gpui_kit::assets::Assets)
+        .with_assets(ui::Icons)
         .run(|cx| {
             gpui_kit::init(cx);
 
@@ -45,5 +45,7 @@ fn main() {
                 cx.new(|cx| ui::MusicApp::new(window, store.clone(), cx))
             })
             .expect("не удалось открыть окно");
+
         });
 }
+

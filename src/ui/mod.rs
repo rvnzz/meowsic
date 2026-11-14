@@ -181,9 +181,6 @@ impl MusicApp {
         if !token.is_empty() {
             this.session.update(cx, |s, cx| s.login(token, cx));
         }
-        if std::env::var("MEOWSIC_UI_TEST").is_ok() {
-            this.start_wave(cx);
-        }
         this
     }
 
@@ -639,7 +636,7 @@ impl MusicApp {
 
     fn render_player_bar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme().clone();
-        let (current, playing, loading, duration, position, shuffle, repeat, context, error, wave_active) = {
+        let (current, playing, loading, duration, position, shuffle, repeat, context, wave_active) = {
             let p = self.player.read(cx);
             (
                 p.current.clone(),
@@ -650,7 +647,6 @@ impl MusicApp {
                 p.shuffle,
                 p.repeat,
                 p.context_name.clone(),
-                p.error.clone(),
                 p.wave.is_some(),
             )
         };
@@ -862,7 +858,7 @@ impl MusicApp {
             // правый блок: громкость, тексты, очередь
             .child(
                 h_flex()
-                    .w_64()
+                    .w_80()
                     .flex_shrink_0()
                     .gap_1()
                     .justify_end()
@@ -922,16 +918,6 @@ impl MusicApp {
                             })),
                     ),
             )
-            .when_some(error, |this, err| {
-                this.child(
-                    div()
-                        .text_xs()
-                        .max_w_64()
-                        .truncate()
-                        .text_color(theme.danger)
-                        .child(err),
-                )
-            })
     }
 
     fn render_lyrics_panel(&mut self, cx: &mut Context<Self>) -> AnyElement {
@@ -1298,3 +1284,30 @@ impl RenderOnce for QueueList {
 }
 
 // хелпер-реэкспорт для страниц
+
+use gpui_kit::assets::{icon_assets, Assets};
+
+/// Иконки приложения: дефолтный бандл компонентов покрывает не весь Lucide,
+/// нужные глифы встраиваем явно.
+icon_assets!(pub AppIcons, [Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, Heart, HeartOff, ThumbsDown, MicVocal, ListMusic, Plus, Trash, Search, Settings, House, Radio, Library, Music, Music4, Volume1, Volume2, VolumeX, Loader, LoaderCircle, RotateCcw, Pencil, LogIn, Circle, ChevronLeft, ChevronRight, ChevronDown, X, Download, Clock, Sun, Moon, Sparkles]);
+
+/// Composite source: components' default bundle first, app icons second.
+pub struct Icons;
+
+impl gpui_kit::AssetSource for Icons {
+    fn load(
+        &self,
+        path: &str,
+    ) -> anyhow::Result<Option<std::borrow::Cow<'static, [u8]>>> {
+        match Assets.load(path) {
+            Ok(Some(data)) => Ok(Some(data)),
+            _ => AppIcons.load(path),
+        }
+    }
+
+    fn list(&self, path: &str) -> anyhow::Result<Vec<SharedString>> {
+        let mut out = Assets.list(path).unwrap_or_default();
+        out.extend(AppIcons.list(path).unwrap_or_default());
+        Ok(out)
+    }
+}

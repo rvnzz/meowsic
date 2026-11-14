@@ -443,7 +443,6 @@ impl Player {
         let mut next = self.order_pos as i32 + dir;
         if next >= len {
             if self.wave.is_some() {
-                next = len - 1;
                 self.wave_more(cx);
                 // волна бесконечна: подождём пачку и продолжим по тикеру
                 self.playing = false;
@@ -685,11 +684,19 @@ impl Player {
         let id = track.id.clone();
         let weak = cx.entity().downgrade();
         cx.spawn(async move |_, cx| {
-            let res = async {
+            let mut res = async {
                 let stream = api.stream(&id, quality).await?;
                 api.download(&stream).await
             }
             .await;
+            if matches!(res, Err(crate::yandex::ApiError::Net(_))) {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                res = async {
+                    let stream = api.stream(&id, quality).await?;
+                    api.download(&stream).await
+                }
+                .await;
+            }
             let _ = weak.update(cx, |this, cx| {
                 this.inflight.remove(&id);
                 match res {
