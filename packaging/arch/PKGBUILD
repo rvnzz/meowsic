@@ -12,8 +12,14 @@ depends=('glibc' 'gcc-libs' 'alsa-lib' 'libxkbcommon' 'libxkbcommon-x11' 'fontco
 makedepends=('rust' 'git' 'pkgconf' 'fontconfig' 'libxkbcommon-x11')
 source=("git+${url}.git#tag=${_tag}")
 sha256sums=('SKIP')
+options=(!lto)
 
 build() {
+  # makepkg может добавить -flto=auto: cc-rs тогда кладёт в libring_core.a
+  # LTO-байткод вместо объектов, и линковка lld не находит ассемлерные символы ring.
+  export CFLAGS="$CFLAGS -fno-lto"
+  export CXXFLAGS="$CXXFLAGS -fno-lto"
+  export LDFLAGS="$LDFLAGS -fno-lto"
   cd meowsic
   cargo build --release --locked
 }
