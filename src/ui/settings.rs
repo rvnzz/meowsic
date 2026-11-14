@@ -20,7 +20,6 @@ use crate::ui::widgets::{SettingRow, StatusBanner};
 
 pub struct SettingsPage {
     ctx: PageCtx,
-    settings: crate::store::Settings,
     token_input: Entity<InputState>,
     accent_input: Entity<InputState>,
     login_error: Option<SharedString>,
@@ -62,7 +61,6 @@ impl SettingsPage {
 
         let mut this = Self {
             ctx,
-            settings: settings.clone(),
             token_input,
             accent_input,
             login_error: None,
@@ -89,11 +87,6 @@ impl SettingsPage {
             }));
         }
         this
-    }
-
-    pub fn set_settings(&mut self, settings: crate::store::Settings, cx: &mut Context<Self>) {
-        self.settings = settings;
-        cx.notify();
     }
 
     pub fn set_login_error(&mut self, msg: SharedString, cx: &mut Context<Self>) {
@@ -231,7 +224,7 @@ fn chip(id: String, label: String, active: bool, on: Rc<dyn Fn(&mut Window, &mut
 impl Render for SettingsPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let app = self.ctx.app.clone();
-        let settings = self.settings.clone();
+        let settings = self.ctx.app.read_with(cx, |app, _| app.settings().clone()).unwrap_or_default();
         let logged_in = self.ctx.session.read(cx).is_logged_in();
         let profile = self.ctx.session.read(cx).profile().cloned();
 

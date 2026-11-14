@@ -336,8 +336,6 @@ impl MusicApp {
             p.set_eq(s.eq.enabled, s.eq.gains_db.clone(), cx);
         });
         self.store.update(cx, |store, _| store.save_settings(&s));
-        self.settings_page
-            .update(cx, |page, cx| page.set_settings(s.clone(), cx));
         cx.notify();
     }
 
