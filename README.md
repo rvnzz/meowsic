@@ -47,6 +47,25 @@ cargo build --release
 
 Тесты: `cargo test` (DSP эквалайзера + сетевые канарейки API/LRCLIB).
 
+## Релизы и пакеты
+
+CI (`.github/workflows/release.yml`) запускается **только на тегах `v*`** и
+складывает артефакты в GitHub Release:
+
+| платформа | артефакт | как собрано |
+| --- | --- | --- |
+| Arch Linux | `meowsic-X.Y.Z-x86_64.pkg.tar.zst` | `makepkg` в контейнере archlinux, PKGBUILD в `packaging/arch` |
+| любой Linux | `meowsic-X.Y.Z-x86_64.AppImage` | ubuntu-22.04 + linuxdeploy, desktop/иконка в `packaging/linux` |
+| Windows x64 | `meowsic-X.Y.Z-win64-setup.exe` | NSIS-установщик, скрипт в `packaging/windows` |
+
+Новый релиз:
+
+```sh
+cargo pkg set version --version X.Y.Z   # или руками Cargo.toml
+git commit -am "release X.Y.Z" && git tag -a vX.Y.Z -m "..."
+git push origin main --follow-tags      # аннотированный тег — триггер CI
+```
+
 ## Хранение данных
 
 `~/.config/meowsic/`:
