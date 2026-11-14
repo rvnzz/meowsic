@@ -61,7 +61,7 @@ CI (`.github/workflows/release.yml`) запускается **только на 
 Новый релиз:
 
 ```sh
-cargo pkg set version --version X.Y.Z   # или руками Cargo.toml
+cargo set-version X.Y.Z  # cargo-edit; или руками Cargo.toml
 git commit -am "release X.Y.Z" && git tag -a vX.Y.Z -m "..."
 git push origin main --follow-tags      # аннотированный тег — триггер CI
 ```
