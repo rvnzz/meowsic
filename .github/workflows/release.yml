@@ -70,7 +70,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed \
             base-devel git rust pkgconf \
-            alsa-lib libxkbcommon libx11 libxcb libxcursor wayland mesa fontconfig
+            alsa-lib libxkbcommon libxkbcommon-x11 libx11 libxcb libxcursor wayland mesa fontconfig
 
       - uses: actions/checkout@v4
 
