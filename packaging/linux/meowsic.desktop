@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=meowsic
+Name[ru]=meowsic — Яндекс Музыка
+GenericName=Music player
+Comment=Неофициальный клиент Яндекс Музыки на GPUI
+Exec=meowsic %u
+Icon=meowsic
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=music;yandex;яндекс;музыка;
+StartupNotify=false

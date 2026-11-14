@@ -1,0 +1,137 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ────────────────────────── AppImage ──────────────────────────
+  appimage:
+    name: AppImage (x86_64)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libxkbcommon-dev \
+            libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcursor-dev libwayland-dev
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Assemble AppDir
+        run: |
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/512x512/apps
+          cp target/release/meowsic AppDir/usr/bin/
+          cp packaging/linux/meowsic.desktop AppDir/usr/share/applications/
+          cp assets/icon.png AppDir/usr/share/icons/hicolor/512x512/apps/meowsic.png
+
+      - name: Package AppImage
+        run: |
+          curl -LO https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          ./linuxdeploy-x86_64.AppImage \
+            --appimage-extract-and-run \
+            --appdir AppDir \
+            --desktop-file packaging/linux/meowsic.desktop \
+            --icon-file assets/icon.png \
+            --output appimage
+          VERSION="${GITHUB_REF_NAME#v}"
+          mv meowsic-*.AppImage "meowsic-${VERSION}-x86_64.AppImage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: meowsic-*.AppImage
+
+  # ────────────────────────── Arch Linux ──────────────────────────
+  arch:
+    name: Arch package (x86_64)
+    runs-on: ubuntu-22.04
+    container:
+      image: archlinux/archlinux:latest
+    steps:
+      - name: Toolchain
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git rust pkgconf \
+            alsa-lib libxkbcommon libx11 libxcb libxcursor wayland mesa
+
+      - uses: actions/checkout@v4
+
+      - name: Build package
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" packaging/arch/PKGBUILD
+          useradd -m build
+          chown -R build:build "$GITHUB_WORKSPACE"
+          su build -c "cd '$GITHUB_WORKSPACE/packaging/arch' && makepkg -c --noconfirm"
+          chmod -R a+r .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch
+          path: packaging/arch/meowsic-*.pkg.tar.zst
+
+  # ────────────────────────── Windows installer ──────────────────────────
+  windows:
+    name: Windows installer (x64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Build installer (NSIS)
+        run: |
+          choco install nsis -y --no-progress > /dev/null
+          export PATH="/c/Program Files (x86)/NSIS:$PATH"
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd packaging/windows
+          makensis /V4 "/DVERSION=${VERSION}" installer.nsi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: packaging/windows/meowsic-*-win64-setup.exe
+
+  # ────────────────────────── Release ──────────────────────────
+  release:
+    name: GitHub Release
+    needs: [appimage, arch, windows]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: dist/*
