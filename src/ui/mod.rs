@@ -132,11 +132,12 @@ impl MusicApp {
             app: weak,
         };
 
-        let seek = cx.new(|_| SliderState::new().min(0.0).max(1.0).default_value(0.0));
+        let seek = cx.new(|_| SliderState::new().min(0.0).max(1.0).step(0.001).default_value(0.0));
         let volume = cx.new(|_| {
             SliderState::new()
                 .min(0.0)
                 .max(1.0)
+                .step(0.01)
                 .default_value(settings.volume)
         });
         let home = cx.new(|cx| HomePage::new(ctx.clone(), cx));

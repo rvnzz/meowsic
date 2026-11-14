@@ -56,7 +56,7 @@ impl SettingsPage {
         let mut eq_sliders = Vec::new();
         for ix in 0..EQ_BANDS {
             let value = settings.eq.gains_db.get(ix).copied().unwrap_or(0.0);
-            eq_sliders.push(cx.new(|_| SliderState::new().min(-12.0).max(12.0).default_value(value)));
+            eq_sliders.push(cx.new(|_| SliderState::new().min(-12.0).max(12.0).step(0.5).default_value(value)));
         }
 
         let mut this = Self {
