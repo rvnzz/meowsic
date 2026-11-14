@@ -6,7 +6,7 @@ impl Yandex {
             return Err(ApiError::Msg("Нет данных аккаунта, войди заново".to_string()));
         }
         let bucket = if dislike { "dislikes" } else { "likes" };
-        let action = if remove { "remove-multiple" } else { "add-multiple" };
+        let action = if remove { "remove" } else { "add-multiple" };
         let path = format!("/users/{uid}/{bucket}/tracks/{action}");
         let body = format!("track-ids={}", urlencoding::encode(track_id));
         let status = self.post_status(&path, "application/x-www-form-urlencoded", body.clone()).await?;
