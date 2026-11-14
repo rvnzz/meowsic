@@ -53,7 +53,7 @@ impl HomePage {
             let res = api.wheel().await;
             let _ = weak.update(cx, |this, cx| {
                 this.wheel = match res {
-                    Ok(items) if items.is_empty() => Load::Failed("Колесо пустое".into()),
+                    Ok(items) if items.is_empty() => Load::Idle,
                     Ok(items) => Load::Ready(items),
                     Err(e) => Load::Failed(e.to_string().into()),
                 };
@@ -194,15 +194,32 @@ impl HomePage {
     fn render_wheel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let body: Vec<AnyElement> = match &self.wheel {
             Load::Loading => (0..8)
-                .map(|ix| {
-                    div()
-                        
+                .map(|_ix| {
+                    v_flex()
                         .w_40()
-                        .h_48()
                         .flex_shrink_0()
-                        .rounded(cx.theme().radius)
-                        .bg(cx.theme().muted)
-                        .child(format!("загрузка {ix}"))
+                        .gap_2()
+                        .child(
+                            div()
+                                .w_full()
+                                .aspect_ratio(1.0)
+                                .rounded(cx.theme().radius)
+                                .bg(cx.theme().muted),
+                        )
+                        .child(
+                            div()
+                                .w_3_4()
+                                .h_4()
+                                .rounded(cx.theme().radius)
+                                .bg(cx.theme().muted),
+                        )
+                        .child(
+                            div()
+                                .w_1_2()
+                                .h_3()
+                                .rounded(cx.theme().radius)
+                                .bg(cx.theme().muted),
+                        )
                         .into_any_element()
                 })
                 .collect(),

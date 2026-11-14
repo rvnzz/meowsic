@@ -32,7 +32,7 @@ use settings::SettingsPage;
 use wave::WavePage;
 use widgets::{Cover, fmt_count, fmt_ms};
 
-pub const MY_WAVE_STATION: &str = "radio-user-default";
+pub const MY_WAVE_STATION: &str = "user:onyourwave";
 
 actions!(
     meowsic,
@@ -180,6 +180,9 @@ impl MusicApp {
         let token = settings.token.clone();
         if !token.is_empty() {
             this.session.update(cx, |s, cx| s.login(token, cx));
+        }
+        if std::env::var("MEOWSIC_UI_TEST").is_ok() {
+            this.start_wave(cx);
         }
         this
     }
@@ -571,13 +574,14 @@ impl MusicApp {
                         h_flex()
                             .id(format!("pl-{kind}"))
                             .w_full()
-                            .h_8()
+                            .h_9()
                             .px_2()
                             .gap_2()
                             .items_center()
                             .rounded(theme.radius)
                             .cursor_pointer()
-                            .bg(if active { theme.accent } else { theme.background })
+                            .text_color(if active { theme.primary } else { theme.muted_foreground })
+                            .when(active, |this| this.bg(theme.accent))
                             .hover(|s| s.bg(theme.secondary_hover))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.navigate(r.clone(), cx)
@@ -1064,7 +1068,7 @@ fn nav_item(
         .ghost()
         .w_full()
         .selected(active)
-        .text_color(if active { theme.primary } else { theme.foreground })
+        .text_color(if active { theme.primary } else { theme.muted_foreground })
         .icon(icon)
         .child(label)
         .on_click(cx.listener(move |this, _, _, cx| this.navigate(route.clone(), cx)))

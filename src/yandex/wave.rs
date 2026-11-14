@@ -1,7 +1,7 @@
 use super::*;
 
 impl Yandex {
-    /// старт или продолжение сессии волны. station: "radio-user-default" = Моя волна.
+    /// старт или продолжение сессии волны. station: "user:onyourwave" = Моя волна.
     pub async fn wave_session(
         &self,
         station: &str,

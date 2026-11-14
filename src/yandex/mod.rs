@@ -371,7 +371,11 @@ async fn parse_json_result(resp: reqwest::Response) -> YResult<Value> {
     if !status.is_success() {
         return Err(ApiError::Http(status.as_u16()));
     }
-    Ok(body.get("result").cloned().unwrap_or(Value::Null))
+    // у /wheel/new и части rotor-эндпоинтов нет обёртки result — берем тело целиком
+    match body.get("result") {
+        Some(inner) if !inner.is_null() => Ok(inner.clone()),
+        _ => Ok(body),
+    }
 }
 
 fn clean_token(raw: &str) -> String {

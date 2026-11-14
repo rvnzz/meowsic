@@ -143,6 +143,12 @@ impl Player {
         self.yandex.lock().unwrap().clone()
     }
 
+    /// Событие + перерисовка: подписчики читают `State`, observers срабатывают на notify.
+    fn emit_state(&mut self, cx: &mut Context<Self>) {
+        cx.emit(PlayerEvent::State);
+        cx.notify();
+    }
+
     fn ensure_ticker(&mut self, cx: &mut Context<Self>) {
         if self.tick.is_some() {
             return;
@@ -186,7 +192,7 @@ impl Player {
         if self.last_session_save.elapsed() > Duration::from_secs(10) {
             self.save_session_now(cx);
         }
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     fn on_track_end(&mut self, cx: &mut Context<Self>) {
@@ -290,7 +296,7 @@ impl Player {
                 Ok(wave) => this.apply_wave(wave, name, cx),
                 Err(e) => {
                     this.error = Some(e.to_string().into());
-                    cx.emit(PlayerEvent::State);
+                    this.emit_state(cx);
                 }
             });
         })
@@ -343,7 +349,7 @@ impl Player {
                             this.order.push(base + ix);
                         }
                     }
-                    cx.emit(PlayerEvent::State);
+                    this.emit_state(cx);
                 }
             });
         })
@@ -395,7 +401,7 @@ impl Player {
             self.order_pos = self.order.iter().position(|&q| q == qix).unwrap_or(0);
         }
         self.save_session_now(cx);
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     pub fn set_repeat(&mut self, mode: RepeatMode, cx: &mut Context<Self>) {
@@ -404,7 +410,7 @@ impl Player {
             rodio.set_volume(self.volume.max(0.0));
         }
         self.save_session_now(cx);
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     pub fn cycle_repeat(&mut self, cx: &mut Context<Self>) {
@@ -445,7 +451,7 @@ impl Player {
                     rodio.stop();
                 }
                 self.started = false;
-                cx.emit(PlayerEvent::State);
+                self.emit_state(cx);
                 return;
             }
             match self.repeat {
@@ -492,7 +498,7 @@ impl Player {
             self.playing = true;
         }
         self.save_session_now(cx);
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     pub fn stop(&mut self, cx: &mut Context<Self>) {
@@ -508,7 +514,7 @@ impl Player {
         self.started = false;
         self.loading = false;
         self.current = None;
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     pub fn seek(&mut self, ms: i64, cx: &mut Context<Self>) {
@@ -519,7 +525,7 @@ impl Player {
             return;
         };
         let _ = rodio.try_seek(Duration::from_millis(ms.max(0) as u64));
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     pub fn set_volume(&mut self, v: f32, cx: &mut Context<Self>) {
@@ -527,7 +533,7 @@ impl Player {
         if let Some(rodio) = self.rodio.as_ref() {
             rodio.set_volume(self.volume);
         }
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     pub fn volume(&self) -> f32 {
@@ -540,7 +546,7 @@ impl Player {
         }
         self.quality = q;
         self.downloads.clear();
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     pub fn set_eq(&mut self, enabled: bool, gains: Vec<f32>, cx: &mut Context<Self>) {
@@ -555,7 +561,7 @@ impl Player {
                 return;
             }
         }
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     pub fn set_uid(&mut self, uid: i64) {
@@ -598,7 +604,7 @@ impl Player {
             self.apply_bytes(gen, &bytes, from_ms, autoplay, cx);
         } else {
             self.loading = true;
-            cx.emit(PlayerEvent::State);
+            self.emit_state(cx);
             self.request_download(track.clone(), gen, from_ms, autoplay, cx);
         }
         self.prefetch_next(cx);
@@ -616,7 +622,7 @@ impl Player {
     fn start_from_bytes(&mut self, bytes: &Arc<Vec<u8>>, from_ms: i64, autoplay: bool, cx: &mut Context<Self>) {
         if let Err(e) = self.ensure_sink(cx) {
             self.error = Some(e.into());
-            cx.emit(PlayerEvent::State);
+            self.emit_state(cx);
             return;
         }
         let Some(track) = self.current.clone() else { return };
@@ -627,7 +633,7 @@ impl Player {
             Ok(d) => d,
             Err(e) => {
                 self.error = Some(format!("Не удалось раскодировать трек: {e}").into());
-                cx.emit(PlayerEvent::State);
+                self.emit_state(cx);
                 return;
             }
         };
@@ -655,7 +661,7 @@ impl Player {
         }
         self.started = true;
         self.loading = false;
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     fn ensure_sink(&mut self, _cx: &mut Context<Self>) -> Result<(), String> {
@@ -696,7 +702,7 @@ impl Player {
                         if gen == this.gen {
                             this.loading = false;
                             this.error = Some(e.to_string().into());
-                            cx.emit(PlayerEvent::State);
+                            this.emit_state(cx);
                         }
                     }
                 }
@@ -821,7 +827,7 @@ impl Player {
                 .detach();
             }
         }
-        cx.emit(PlayerEvent::State);
+        self.emit_state(cx);
     }
 
     pub fn save_session_now(&mut self, cx: &mut Context<Self>) {
