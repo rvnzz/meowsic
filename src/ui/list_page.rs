@@ -41,6 +41,8 @@ pub struct ListPage {
     tracks_rc: Rc<Vec<TrackDto>>,
     context_label: String,
     can_remove: bool,
+    long_list: bool,
+    awaiting_profile: bool,
     row_height: f32,
     sizes: Rc<Vec<gpui_kit::Size<gpui_kit::Pixels>>>,
     sizes_len: usize,
@@ -75,6 +77,8 @@ impl ListPage {
             tracks_rc: Rc::new(Vec::new()),
             context_label: String::new(),
             can_remove: false,
+            long_list: false,
+            awaiting_profile: false,
             row_height: 48.0,
             sizes: Rc::new(Vec::new()),
             sizes_len: 0,
@@ -84,9 +88,7 @@ impl ListPage {
         };
         let session = this.ctx.session.clone();
         this._subs.push(cx.subscribe(&session, |this, _, event, cx| {
-            if matches!(event, crate::session::SessionEvent::LoggedIn)
-                && matches!(this.data, Load::Failed(_))
-            {
+            if matches!(event, crate::session::SessionEvent::LoggedIn) && this.awaiting_profile {
                 this.load(cx);
             }
         }));
@@ -105,10 +107,12 @@ impl ListPage {
             .unwrap_or(0);
         if uid == 0 && api.has_token() {
             // профиль ещё не доехал — перезагрузимся на LoggedIn
+            self.awaiting_profile = true;
             self.data = Load::Loading;
             cx.notify();
             return;
         }
+        self.awaiting_profile = false;
         self.data = Load::Loading;
         let kind = self.kind.clone();
         let weak = cx.entity().downgrade();
@@ -441,7 +445,9 @@ impl Render for ListPage {
             } else {
                 Some(albums_row(&data.albums.clone(), self.ctx.clone(), cx).into_any_element())
             };
-            let list: AnyElement = if tracks_len > 30 {
+            let long = tracks_len > 30;
+            self.long_list = long;
+            let list: AnyElement = if long {
                 v_virtual_list(
                     entity,
                     "list-tracks",
@@ -450,37 +456,49 @@ impl Render for ListPage {
                         range.map(|ix| view.render_track(ix, cx)).collect()
                     },
                 )
+                .flex_1()
+                .min_h_0()
                 .into_any_element()
             } else {
-                v_flex()
-                    
-                    .gap_1()
-                    .children((0..tracks_len).map(|ix| self.render_track_static(ix, cx)))
-                    .into_any_element()
+                v_flex().gap_1().children((0..tracks_len).map(|ix| self.render_track_static(ix, cx))).into_any_element()
             };
-            v_flex()
-                
-                .gap_4()
-                .child(header)
-                .when_some(albums, |this, el| {
-                    this.child(
-                        v_flex()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_weight(FontWeight::BOLD)
-                                    .child("Альбомы"),
-                            )
-                            .child(el),
+            let albums_block: Option<AnyElement> = albums.map(|el| {
+                v_flex()
+                    .w_full()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(FontWeight::BOLD)
+                            .child("Альбомы"),
                     )
-                })
-                .child(list)
-                .into_any_element()
+                    .child(el)
+                    .into_any_element()
+            });
+            if long {
+                v_flex()
+                    .w_full()
+                    .flex_1()
+                    .min_h_0()
+                    .gap_4()
+                    .child(header)
+                    .when_some(albums_block, |this, el| this.child(el))
+                    .child(list)
+                    .into_any_element()
+            } else {
+                v_flex()
+                    .w_full()
+                    .flex_1()
+                    .min_h_0()
+                    .gap_4()
+                    .overflow_y_scrollbar()
+                    .child(header)
+                    .when_some(albums_block, |this, el| this.child(el))
+                    .child(list)
+                    .into_any_element()
+            }
         } else if matches!(self.data, Load::Loading) {
-            v_flex()
-                
-                .items_center()
+            v_flex().w_full().items_center()
                 .py_12()
                 .child(empty_hint("Загружаю…", cx))
                 .into_any_element()
@@ -492,7 +510,6 @@ impl Render for ListPage {
             .id("list-page")
             .size_full()
             .min_w_0()
-            .overflow_y_scrollbar()
             .gap_4()
             .p_6()
             .when_some(error, |this, err| this.child(StatusBanner::error(err)))
