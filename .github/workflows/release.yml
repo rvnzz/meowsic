@@ -27,9 +27,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libasound2-dev libxkbcommon-dev \
-            libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-            libxcursor-dev libwayland-dev
+            pkg-config libasound2-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libfontconfig1-dev libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxcursor-dev libwayland-dev
 
       - name: Build
         run: cargo build --release --locked
@@ -70,7 +70,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed \
             base-devel git rust pkgconf \
-            alsa-lib libxkbcommon libx11 libxcb libxcursor wayland mesa
+            alsa-lib libxkbcommon libx11 libxcb libxcursor wayland mesa fontconfig
 
       - uses: actions/checkout@v4
 
@@ -110,6 +110,7 @@ jobs:
         run: |
           choco install nsis -y --no-progress > /dev/null
           export PATH="/c/Program Files (x86)/NSIS:$PATH"
+          export MSYS2_ARG_CONV_EXCL="*"
           VERSION="${GITHUB_REF_NAME#v}"
           cd packaging/windows
           makensis /V4 "/DVERSION=${VERSION}" installer.nsi

@@ -8,8 +8,8 @@ pkgdesc='Неофициальный десктоп-клиент Яндекс М�
 arch=('x86_64')
 url='https://github.com/rvnzz/meowsic'
 license=('GPL3')
-depends=('glibc' 'gcc-libs' 'alsa-lib' 'libxkbcommon' 'libx11' 'libxcb' 'wayland')
-makedepends=('rust' 'git' 'pkgconf')
+depends=('glibc' 'gcc-libs' 'alsa-lib' 'libxkbcommon' 'fontconfig' 'libx11' 'libxcb' 'wayland')
+makedepends=('rust' 'git' 'pkgconf' 'fontconfig')
 source=("git+${url}.git#tag=${_tag}")
 sha256sums=('SKIP')
 
