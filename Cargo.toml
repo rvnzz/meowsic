@@ -1,0 +1,21 @@
+[package]
+name = "meowsic"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gpui-kit = "0.9"
+rodio = { version = "0.23", default-features = false, features = ["playback", "symphonia-mp3", "symphonia-flac", "symphonia-vorbis"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+md-5 = "0.10"
+hex = "0.4"
+dirs = "6"
+futures = "0.3"
+urlencoding = "2"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "time", "net", "io-util"] }
+anyhow = "1.0.104"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+
+[profile.dev]
+opt-level = 1
