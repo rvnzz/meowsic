@@ -223,6 +223,7 @@ impl MusicApp {
                         this.settings_page
                             .update(cx, |page, cx| page.set_login_error(msg.clone(), cx));
                     }
+                    SessionEvent::OauthChanged => cx.notify(),
                 }
             }));
 

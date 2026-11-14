@@ -1,5 +1,6 @@
 mod account;
 mod catalog;
+mod oauth;
 mod dto;
 mod library;
 mod lyrics;
@@ -7,6 +8,7 @@ mod stream;
 mod wave;
 
 pub use dto::*;
+pub use oauth::{DeviceCode, TokenPoll};
 
 /// Схема сырых ответов Яндекса — размытая, всё необязательное.
 mod raw {

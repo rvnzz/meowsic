@@ -76,7 +76,9 @@ impl SettingsPage {
                     this.login_error = None;
                     cx.notify();
                 }
-                SessionEvent::LoginFailed(_) | SessionEvent::LoggedOut => cx.notify(),
+                SessionEvent::LoginFailed(_)
+                | SessionEvent::LoggedOut
+                | SessionEvent::OauthChanged => cx.notify(),
             }
         }));
         for state in this.eq_sliders.clone() {
@@ -235,6 +237,82 @@ impl Render for SettingsPage {
 
         // --- аккаунт ---
         let login_session = self.ctx.session.clone();
+        let oauth_state = self.ctx.session.read(cx).oauth().clone();
+        use crate::session::OauthState;
+        let oauth_el: AnyElement = match oauth_state {
+            OauthState::Idle => Button::new("oauth-start")
+                .primary()
+                .large()
+                .icon(gpui_kit::assets::IconName::LogIn)
+                .label("Войти через Яндекс ID")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    let session = this.ctx.session.clone();
+                    session.update(cx, |s, cx| s.start_oauth(cx));
+                }))
+                .into_any_element(),
+            OauthState::Waiting { user_code, url } => v_flex()
+                .gap_2()
+                .p_3()
+                .rounded(cx.theme().radius)
+                .bg(cx.theme().muted)
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child("Открылась страница Яндекса. Введи код:"),
+                )
+                .child(
+                    div()
+                        .text_2xl()
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(cx.theme().primary)
+                        .child(user_code.clone()),
+                )
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .child(
+                            Button::new("oauth-waiting")
+                                .outline()
+                                .loading(true)
+                                .label("Ждём подтверждения…"),
+                        )
+                        .child({
+                            let session = login_session.clone();
+                            let _ = &url;
+                            Button::new("oauth-reopen")
+                                .ghost()
+                                .label("Открыть снова")
+                                .on_click(move |_, _, cx| {
+                                    session.update(cx, |s, _| s.reopen_oauth_page());
+                                })
+                        })
+                        .child(
+                            Button::new("oauth-cancel")
+                                .ghost()
+                                .danger()
+                                .label("Отмена")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    let session = this.ctx.session.clone();
+                                    session.update(cx, |s, cx| s.cancel_oauth(cx));
+                                })),
+                        ),
+                )
+                .into_any_element(),
+            OauthState::Failed(msg) => v_flex()
+                .gap_2()
+                .child(StatusBanner::error(msg))
+                .child(
+                    Button::new("oauth-retry")
+                        .primary()
+                        .label("Попробовать снова")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            let session = this.ctx.session.clone();
+                            session.update(cx, |s, cx| s.start_oauth(cx));
+                        })),
+                )
+                .into_any_element(),
+        };
         let input_row = h_flex()
             .gap_2()
             .child(
@@ -296,6 +374,7 @@ impl Render for SettingsPage {
             );
         let account_body = v_flex()
             .gap_3()
+            .child(oauth_el)
             .child(input_row)
             .when_some(profile_row, |this, el| this.child(el))
             .child(accent_row)
