@@ -82,12 +82,19 @@ impl ListPage {
             scroll: VirtualListScrollHandle::new(),
             _subs: Vec::new(),
         };
+        let session = this.ctx.session.clone();
+        this._subs.push(cx.subscribe(&session, |this, _, event, cx| {
+            if matches!(event, crate::session::SessionEvent::LoggedIn)
+                && matches!(this.data, Load::Failed(_))
+            {
+                this.load(cx);
+            }
+        }));
         this.load(cx);
         this
     }
 
     fn load(&mut self, cx: &mut Context<Self>) {
-        self.data = Load::Loading;
         let api = self.ctx.session.read(cx).yandex();
         let uid = self
             .ctx
@@ -96,6 +103,13 @@ impl ListPage {
             .profile()
             .map(|p| p.uid)
             .unwrap_or(0);
+        if uid == 0 && api.has_token() {
+            // профиль ещё не доехал — перезагрузимся на LoggedIn
+            self.data = Load::Loading;
+            cx.notify();
+            return;
+        }
+        self.data = Load::Loading;
         let kind = self.kind.clone();
         let weak = cx.entity().downgrade();
         cx.spawn(async move |_, cx| {

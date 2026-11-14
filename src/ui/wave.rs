@@ -9,7 +9,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::{Load, MY_WAVE_STATION, PageCtx};
-use crate::ui::widgets::{Cover, StatusBanner, empty_hint};
+use crate::ui::widgets::{Cover, StatusBanner, empty_hint, heart_icon};
 use crate::yandex::StationInfoDto;
 
 pub struct WavePage {
@@ -191,11 +191,7 @@ impl Render for WavePage {
                                     let id = id.clone();
                                     Button::new(format!("wave-like-{id}"))
                                         .outline()
-                                        .icon(if liked {
-                                            IconName::Heart
-                                        } else {
-                                            IconName::HeartOff
-                                        })
+                                        .icon(crate::ui::widgets::heart_icon(liked))
                                         .label(if liked { "Лайк стоит" } else { "Лайк" })
                                         .text_color(if liked {
                                             theme.primary

@@ -11,6 +11,17 @@ use gpui_kit::{
 
 use crate::yandex::TrackDto;
 
+/// Сердечко лайка: заполненное, когда лайк стоит; контурное — когда нет.
+pub const HEART_FILL: &[u8] = include_bytes!("../../assets/icons/heart-fill.svg");
+
+pub fn heart_icon(liked: bool) -> Icon {
+    if liked {
+        Icon::default().data(HEART_FILL)
+    } else {
+        Icon::new(IconName::Heart)
+    }
+}
+
 pub fn fmt_ms(ms: i64) -> String {
     let total = ms.max(0) / 1000;
     format!("{:02}:{:02}", total / 60, total % 60)
@@ -225,11 +236,7 @@ impl RenderOnce for TrackRow {
                     Button::new(format!("like-{id_like}"))
                         .ghost()
                         .xsmall()
-                        .icon(if liked {
-                            IconName::Heart
-                        } else {
-                            IconName::HeartOff
-                        })
+                        .icon(heart_icon(liked))
                         .text_color(if liked { c_primary } else { c_muted_fg })
                         .tooltip(if liked { "Убрать лайк" } else { "Лайк" })
                         .on_click(move |_, window, cx| f(ix, window, cx)),

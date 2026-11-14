@@ -1079,11 +1079,9 @@ fn like_button(
         .ghost()
         .small()
         .icon(if dislike {
-            IconName::ThumbsDown
-        } else if on {
-            IconName::Heart
+            Icon::new(IconName::ThumbsDown)
         } else {
-            IconName::HeartOff
+            crate::ui::widgets::heart_icon(on)
         })
         .text_color(if on { accent } else { muted })
         .tooltip(tip)
