@@ -12,6 +12,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::{Load, MY_WAVE_STATION, PageCtx, parse_hex};
+use crate::ui::visualizer::FlowRibbon;
 use crate::ui::widgets::{Cover, StatusBanner};
 use crate::yandex::{StationInfoDto, TrackDto};
 
@@ -19,7 +20,6 @@ pub struct WavePage {
     ctx: PageCtx,
     station: String,
     info: Load<StationInfoDto>,
-    viz: Entity<crate::ui::visualizer::Visualizer>,
     _subs: Vec<Subscription>,
 }
 
@@ -69,19 +69,10 @@ fn slide() -> Transition {
 
 impl WavePage {
     pub fn new(ctx: PageCtx, cx: &mut Context<Self>) -> Self {
-        let viz = cx.new(|cx| {
-            crate::ui::visualizer::Visualizer::new(
-                ctx.player.clone(),
-                crate::player::tap::BANDS,
-                56.0,
-                cx,
-            )
-        });
         let mut this = Self {
             ctx,
             station: MY_WAVE_STATION.to_string(),
             info: Load::Idle,
-            viz,
             _subs: Vec::new(),
         };
         let player = this.ctx.player.clone();
@@ -327,8 +318,11 @@ impl Render for WavePage {
                         .child(
                             div()
                                 .w_72()
-                                .h_16()
-                                .child(self.viz.clone()),
+                                .h_20()
+                                .child({
+                                    let levels = self.ctx.player.read(cx).level_state();
+                                    FlowRibbon::hero(levels, playing).fill_color(palette.accent)
+                                }),
                         ),
                 )
                 // правая колонка: текст и управление
