@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use gpui_kit::prelude::*;
 use gpui_kit::{Context, EventEmitter, SharedString};
 
 use crate::yandex::{PlaylistDto, Yandex};

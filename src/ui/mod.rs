@@ -1296,8 +1296,8 @@ impl RenderOnce for QueueList {
 
 use gpui_kit::assets::{icon_assets, Assets};
 
-/// Иконки приложения: дефолтный бандл компонентов покрывает не весь Lucide,
-/// нужные глифы встраиваем явно.
+// Иконки приложения: дефолтный бандл компонентов покрывает не весь Lucide,
+// нужные глифы встраиваем явно.
 icon_assets!(pub AppIcons, [Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, Heart, HeartOff, ThumbsDown, MicVocal, ListMusic, Plus, Trash, Search, Settings, House, Radio, Library, Music, Music4, Volume1, Volume2, VolumeX, Loader, LoaderCircle, RotateCcw, Pencil, LogIn, Circle, ChevronLeft, ChevronRight, ChevronDown, X, Download, Clock, Sun, Moon, Sparkles]);
 
 /// Composite source: components' default bundle first, app icons second.

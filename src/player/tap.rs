@@ -11,7 +11,6 @@ use std::sync::{
 use rodio::{ChannelCount, SampleRate, Source as RodioSource};
 
 use super::eq::Biquad;
-use std::num::{NonZeroU16, NonZeroU32};
 
 pub const BANDS: usize = 6;
 /// Границы полос: 120/400/900/1800/3500 Гц; последняя — всё выше 3500.
@@ -212,6 +211,7 @@ impl<I: RodioSource<Item = f32>> RodioSource for LevelTap<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::num::{NonZeroU16, NonZeroU32};
 
     /// Синус 100 Гц должен дать максимум в первой полосе и почти ноль в высокой.
     #[test]

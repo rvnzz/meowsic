@@ -6,7 +6,6 @@ use std::{
     time::Duration,
 };
 
-use gpui_kit::prelude::*;
 use gpui_kit::{Context, Entity, EventEmitter, SharedString};
 
 use crate::store::Store;

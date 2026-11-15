@@ -3,16 +3,15 @@ use std::time::Duration;
 use gpui_kit::assets::IconName;
 use gpui_kit::base::motion::{transition, Transition};
 use gpui_kit::component::{
-    ActiveTheme, Icon, Sizable, Size,
+    ActiveTheme, Icon, Sizable,
     button::{Button, ButtonVariants},
-    scroll::ScrollableElement,
     h_flex, v_flex,
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::{Load, MY_WAVE_STATION, PageCtx, parse_hex};
-use crate::ui::visualizer::BeatStar;
+use crate::ui::visualizer::StarScene;
 use crate::ui::widgets::{Cover, StatusBanner};
 use crate::yandex::{StationInfoDto, TrackDto};
 
@@ -20,6 +19,7 @@ pub struct WavePage {
     ctx: PageCtx,
     station: String,
     info: Load<StationInfoDto>,
+    show_settings: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -73,6 +73,7 @@ impl WavePage {
             ctx,
             station: MY_WAVE_STATION.to_string(),
             info: Load::Idle,
+            show_settings: false,
             _subs: Vec::new(),
         };
         let player = this.ctx.player.clone();
@@ -247,173 +248,144 @@ impl Render for WavePage {
             let id = track.id.clone();
             let liked = self.ctx.lib.read(cx).is_liked(&id);
             let disliked = self.ctx.lib.read(cx).is_disliked(&id);
+            let elapsed_s = (position.max(0) / 1000) as i64;
+            let total_s = (duration.max(0) / 1000) as i64;
             let pct = if duration > 0 {
                 (position.max(0) as f32 / duration.max(1) as f32).clamp(0.0, 1.0)
             } else {
                 0.0
             };
-            let elapsed_s = (position.max(0) / 1000) as i64;
-            let remain_s = ((duration - position).max(0) / 1000) as i64;
 
-            h_flex()
+            let like_btn = {
+                let api = api.clone();
+                let lib = entity_lib.clone();
+                let p = entity_player.clone();
+                let tid = id.clone();
+                Button::new(format!("wave-like-{tid}"))
+                    .ghost()
+                    .text_color(if liked { palette.accent } else { ink_main })
+                    .icon(crate::ui::widgets::heart_icon(liked))
+                    .label("Мне нравится")
+                    .on_click(move |_, _, cx| {
+                        let id = tid.clone();
+                        let _ = lib.update(cx, |lib, cx| {
+                            lib.toggle_like(&api, &id, false, cx);
+                        });
+                        let _ = p.update(cx, |pl, cx| pl.wave_feedback_pub("like", cx));
+                    })
+            };
+            let dislike_btn = {
+                let api = api.clone();
+                let lib = entity_lib.clone();
+                let p = entity_player.clone();
+                let tid = id.clone();
+                Button::new(format!("wave-dislike-{tid}"))
+                    .ghost()
+                    .text_color(if disliked { theme.danger } else { ink_soft })
+                    .icon(IconName::ThumbsDown)
+                    .on_click(move |_, _, cx| {
+                        let id = tid.clone();
+                        let _ = lib.update(cx, |lib, cx| {
+                            lib.toggle_like(&api, &id, true, cx);
+                        });
+                        let _ = p.update(cx, |pl, cx| {
+                            pl.wave_feedback_pub("dislike", cx);
+                            pl.next(cx);
+                        });
+                    })
+            };
+
+            // стек по центру кадра: обложка → название → исполнитель → управление
+            v_flex()
                 .w_full()
-                .gap_8()
                 .items_center()
-                // левая колонка: светящаяся обложка + прогресс под ней
+                .gap_4()
                 .child(
-                    v_flex()
-                        .gap_4()
+                    div()
+                        .size_80()
                         .flex_shrink_0()
-                        .child(
-                            div()
-                                .size_72()
-                                .overflow_hidden()
-                                .rounded_2xl()
-                                .shadow_2xl()
-                                .border_1()
-                                .border_color(glass_border)
-                                .child(Cover::new(
-                                    track.cover_url_large.clone(),
-                                    288.0,
-                                    format!("wave-hero-{id}"),
-                                )),
-                        )
-                        .child(
-                            v_flex()
-                                .w_72()
-                                .gap_1()
-                                .child(
-                                    div()
-                                        .w_full()
-                                        .h_1p5()
-                                        .overflow_hidden()
-                                        .rounded_full()
-                                        .bg(ink_main.opacity(0.14))
-                                        .child(
-                                            div()
-                                                .h_full()
-                                                .w(rems(18.0 * pct))
-                                                .rounded_full()
-                                                .bg(ink_main),
-                                        ),
-                                )
-                                .child(
-                                    h_flex()
-                                        .w_full()
-                                        .justify_between()
-                                        .text_xs()
-                                        .text_color(ink_soft)
-                                        .child(format!(
-                                            "{:02}:{:02}",
-                                            elapsed_s / 60,
-                                            elapsed_s % 60
-                                        ))
-                                        .child(format!(
-                                            "осталось {}:{:02}",
-                                            remain_s / 60,
-                                            remain_s % 60
-                                        )),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .w_72()
-                                .h_48()
-                                .items_center()
-                                .child({
-                                    let levels = self.ctx.player.read(cx).level_state();
-                                    BeatStar::hero(levels, playing).fill_color(palette.accent)
-                                }),
-                        ),
+                        .overflow_hidden()
+                        .rounded_2xl()
+                        .shadow_2xl()
+                        .border_1()
+                        .border_color(glass_border)
+                        .child(Cover::new(
+                            track.cover_url_large.clone(),
+                            320.0,
+                            format!("wave-hero-{id}"),
+                        )),
                 )
-                // правая колонка: текст и управление
                 .child(
                     v_flex()
-                        .min_w_0()
-                        .flex_1()
-                        .gap_2()
+                        .items_center()
+                        .gap_1()
+                        .px_8()
                         .child(
                             div()
-                                .text_xs()
-                                .text_color(ink_soft)
-                                .child("МОЯ ВОЛНА · НЕПРЕРЫВНЫЙ ПОТОК"),
-                        )
-                        .child(
-                            div()
-                                .text_3xl()
+                                .text_2xl()
                                 .font_weight(FontWeight::EXTRA_BOLD)
                                 .text_color(ink_main)
-                                                                .child(track.title.clone()),
+                                .text_center()
+                                .child(track.title.clone()),
                         )
                         .child(
                             div()
-                                .text_lg()
+                                .text_base()
                                 .text_color(ink_soft)
+                                .text_center()
                                 .child(track.artist_line()),
-                        )
-                        .when_some(track.album_title.clone(), move |this, album| {
-                            this.child(div().text_sm().text_color(ink_soft).child(album))
-                        })
-                        .child(div().min_h_4())
+                        ),
+                )
+                .child(div().h_2())
+                .child(
+                    h_flex()
+                        .gap_6()
+                        .items_center()
+                        .child(like_btn)
                         .child(
                             h_flex()
                                 .gap_4()
                                 .items_center()
                                 .child(circle("wave-prev", IconName::SkipBack, "Назад", false))
                                 .child(play_button)
-                                .child(circle("wave-next", IconName::SkipForward, "Пропустить", true)),
+                                .child(circle(
+                                    "wave-next",
+                                    IconName::SkipForward,
+                                    "Пропустить",
+                                    true,
+                                )),
+                        )
+                        .child(dislike_btn),
+                )
+                .child(
+                    v_flex()
+                        .w_full()
+                        .max_w(rems(46.0))
+                        .gap_1()
+                        .mt_6()
+                        .child(
+                            div()
+                                .w_full()
+                                .h_1()
+                                .overflow_hidden()
+                                .rounded_full()
+                                .bg(ink_main.opacity(0.18))
+                                .child(
+                                    div()
+                                        .h_full()
+                                        .w(relative(pct))
+                                        .rounded_full()
+                                        .bg(ink_main),
+                                ),
                         )
                         .child(
                             h_flex()
-                                .gap_3()
-                                .mt_4()
-                                .child({
-                                    let api = api.clone();
-                                    let lib = entity_lib.clone();
-                                    let p = entity_player.clone();
-                                    let id = id.clone();
-                                    Button::new(format!("wave-like-{id}"))
-                                        .ghost()
-                                        .bg(glass)
-                                        .text_color(ink_main)
-                                        .icon(if liked {
-                                            IconName::Heart
-                                        } else {
-                                            IconName::HeartOff
-                                        })
-                                        .label(if liked { "Лайк стоит" } else { "Лайк" })
-                                        .on_click(move |_, _, cx| {
-                                            let id = id.clone();
-                                            let _ = lib.update(cx, |lib, cx| {
-                                                lib.toggle_like(&api, &id, false, cx);
-                                            });
-                                            let _ = p.update(cx, |pl, cx| {
-                                                pl.wave_feedback_pub("like", cx);
-                                            });
-                                        })
-                                })
-                                .child({
-                                    let api = api.clone();
-                                    let lib = entity_lib.clone();
-                                    let p = entity_player.clone();
-                                    let id = id.clone();
-                                    Button::new(format!("wave-dislike-{id}"))
-                                        .ghost()
-                                        .bg(glass)
-                                        .text_color(if disliked { theme.danger } else { ink_main })
-                                        .icon(IconName::ThumbsDown)
-                                        .label("Дизлайк")
-                                        .on_click(move |_, _, cx| {
-                                            let id = id.clone();
-                                            let _ = lib.update(cx, |lib, cx| {
-                                                lib.toggle_like(&api, &id, true, cx);
-                                            });
-                                            let _ = p.update(cx, |pl, cx| {
-                                                pl.wave_feedback_pub("dislike", cx);
-                                                pl.next(cx);
-                                            });
-                                        })
-                                }),
+                                .w_full()
+                                .justify_between()
+                                .text_xs()
+                                .text_color(ink_soft)
+                                .child(format!("{:02}:{:02}", elapsed_s / 60, elapsed_s % 60))
+                                .child(format!("{:02}:{:02}", total_s / 60, total_s % 60)),
                         ),
                 )
                 .into_any_element()
@@ -421,7 +393,6 @@ impl Render for WavePage {
             v_flex()
                 .w_full()
                 .items_center()
-                .py_24()
                 .child(
                     div()
                         .text_lg()
@@ -432,197 +403,219 @@ impl Render for WavePage {
         } else {
             v_flex()
                 .w_full()
-                .justify_center()
-                .py_10()
+                .items_center()
+                .gap_4()
                 .child(
                     div()
-                        .mx_auto()
-                        .w_full()
-                        .max_w(rems(28.0))
+                        .size_12()
+                        .rounded_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(palette.accent.opacity(0.16))
+                        .border_1()
+                        .border_color(palette.accent.opacity(0.5))
                         .child(
-                            v_flex()
-                                .w_full()
-                                .items_center()
-                                .gap_4()
-                                .px_8()
-                                .py_10()
-                                .rounded_2xl()
-                                .bg(glass)
-                                .border_1()
-                                .border_color(glass_border)
-                                .child(
-                                    div()
-                                        .size_12()
-                                        .rounded_full()
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .bg(palette.accent.opacity(0.16))
-                                        .border_1()
-                                        .border_color(palette.accent.opacity(0.5))
-                                        .child(
-                                            Icon::new(IconName::Radio)
-                                                .small()
-                                                .text_color(palette.accent),
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .text_xl()
-                                        .font_weight(FontWeight::BOLD)
-                                        .text_color(ink_main)
-                                        .child("Волна остановлена"),
-                                )
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_center()
-                                        .text_color(ink_soft)
-                                        .child(
-                                            "Персональный поток, который подстраивается \nпод твои лайки и дизлайки с каждой песней",
-                                        ),
-                                )
-                                .child(
-                                    Button::new("wave-start")
-                                        .primary()
-                                        .large()
-                                        .icon(IconName::Play)
-                                        .label("Запустить мою волну")
-                                        .on_click(cx.listener({
-                                            let p = entity_player.clone();
-                                            move |_, _, _, cx| {
-                                                let _ = p.update(cx, |pl, cx| {
-                                                    pl.start_wave(MY_WAVE_STATION, "Моя волна", cx)
-                                                });
-                                            }
-                                        })),
-                                ),
+                            Icon::new(IconName::Radio)
+                                .small()
+                                .text_color(palette.accent),
                         ),
                 )
-                .into_any_element()
-                };
-
-        let settings_card: AnyElement = match &self.info {
-            Load::Idle | Load::Loading => {
-                if in_wave {
-                    tinted_note(if matches!(self.info, Load::Loading) { "Читаю настройки станции…" } else { "Настройке волны ещё учатся…" }, ink_soft)
-                } else {
-                    div().into_any_element()
-                }
-            }
-            Load::Failed(msg) => StatusBanner::error(msg.clone()).into_any_element(),
-            Load::Ready(info) => {
-                let info = info.clone();
-                let lang = info.language.clone();
-                let mood = info.mood_energy.clone();
-                let ent = cx.entity().downgrade();
-                let glass_chip = glass;
-                let border_chip = glass_border;
-                let ink_chip = ink_main;
-                let ink_btn = ink(ink_main);
-
-                let mk_chip = move |group: &'static str,
-                                    value: String,
-                                    name: String,
-                                    active: bool,
-                                    lang_i: Option<String>,
-                                    mood_i: Option<String>| {
-                    let ent = ent.clone();
+                .child(
                     div()
-                        .id(format!("{group}-{value}"))
-                        .px_3()
-                        .py_1()
-                        .rounded_full()
-                        .cursor_pointer()
+                        .text_xl()
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(ink_main)
+                        .child("Волна остановлена"),
+                )
+                .child(
+                    div()
                         .text_sm()
-                        .border_1()
-                        .border_color(if active { glass_chip } else { border_chip })
-                        .bg(if active { ink_chip } else { glass_chip })
-                        .text_color(if active { ink_btn } else { ink_chip })
-                        .hover(|s| s.bg(if active { ink_chip } else { border_chip }))
-                        .child(name)
-                        .on_click(move |_, _, cx| {
-                            let value = value.clone();
-                            let lang_i = lang_i.clone();
-                            let mood_i = mood_i.clone();
-                            let _ = ent.update(cx, |this, cx| match group {
-                                "lang" => this.set_setting(
-                                    Some(value),
-                                    mood_i.filter(|s| !s.is_empty()),
-                                    cx,
-                                ),
-                                _ => this.set_setting(
-                                    lang_i.filter(|s| !s.is_empty()),
-                                    Some(value),
-                                    cx,
-                                ),
-                            });
-                        })
-                };
-
-                let lang_chips: Vec<_> = std::iter::once((String::new(), "Не важно".to_string()))
-                    .chain(
-                        info.languages
-                            .iter()
-                            .map(|o| (o.value.clone(), o.name.clone())),
-                    )
-                    .map(|(value, name)| {
-                        let active = lang.as_deref().unwrap_or_default() == value.as_str();
-                        mk_chip("lang", value, name, active, lang.clone(), mood.clone())
-                    })
-                    .collect();
-                let mood_chips: Vec<_> = std::iter::once((String::new(), "Как всегда".to_string()))
-                    .chain(info.moods.iter().map(|o| (o.value.clone(), o.name.clone())))
-                    .map(|(value, name)| {
-                        let active = mood.as_deref().unwrap_or_default() == value.as_str();
-                        mk_chip("mood", value, name, active, lang.clone(), mood.clone())
-                    })
-                    .collect();
-
-                v_flex()
-                    .w_full()
-                    .gap_4()
-                    .p_5()
-                    .rounded_2xl()
-                    .bg(glass)
-                    .border_1()
-                    .border_color(glass_border)
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(ink_main)
-                            .child("НАСТРОЙКИ ВОЛНЫ"),
-                    )
-                    .child(h_flex().gap_2().flex_wrap().children(lang_chips))
-                    .child(h_flex().gap_2().flex_wrap().children(mood_chips))
-                    .into_any_element()
-            }
+                        .text_center()
+                        .text_color(ink_soft)
+                        .child(
+                            "Персональный поток, который подстраивается \nпод твои лайки и дизлайки с каждой песней",
+                        ),
+                )
+                .child(
+                    Button::new("wave-start")
+                        .primary()
+                        .large()
+                        .icon(IconName::Play)
+                        .label("Запустить мою волну")
+                        .on_click(cx.listener({
+                            let p = entity_player.clone();
+                            move |this: &mut Self, _, _, cx| {
+                                this.show_settings = false;
+                                let _ = p.update(cx, |pl, cx| {
+                                    pl.start_wave(MY_WAVE_STATION, "Моя волна", cx)
+                                });
+                            }
+                        })),
+                )
+                .into_any_element()
         };
 
-        v_flex()
+        let gear = div()
+            .id("wave-settings-toggle")
+            .size_9()
+            .flex_shrink_0()
+            .rounded_full()
+            .cursor_pointer()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(if self.show_settings { ink_main.opacity(0.18) } else { glass })
+            .border_1()
+            .border_color(glass_border)
+            .hover(|s| s.bg(ink_main.opacity(0.14)))
+            .child(Icon::new(IconName::Settings).small().text_color(ink_main))
+            .on_click(cx.listener(|this, _, _, _| this.show_settings = !this.show_settings));
+
+        let settings_pop: Option<AnyElement> = if in_wave && self.show_settings {
+            let card: AnyElement = match &self.info {
+                Load::Idle | Load::Loading => tinted_note(
+                    if matches!(self.info, Load::Loading) { "Читаю настройки станции…" } else { "Настройке волны ещё учатся…" },
+                    ink_soft,
+                ),
+                Load::Failed(msg) => StatusBanner::error(msg.clone()).into_any_element(),
+                Load::Ready(info) => {
+                    let info = info.clone();
+                    let lang = info.language.clone();
+                    let mood = info.mood_energy.clone();
+                    let ent = cx.entity().downgrade();
+                    let glass_chip = glass;
+                    let border_chip = glass_border;
+                    let ink_chip = ink_main;
+                    let ink_btn = ink(ink_main);
+
+                    let mk_chip = move |group: &'static str,
+                                        value: String,
+                                        name: String,
+                                        active: bool,
+                                        lang_i: Option<String>,
+                                        mood_i: Option<String>| {
+                        let ent = ent.clone();
+                        div()
+                            .id(format!("{group}-{value}"))
+                            .px_3()
+                            .py_1()
+                            .rounded_full()
+                            .cursor_pointer()
+                            .text_sm()
+                            .border_1()
+                            .border_color(if active { glass_chip } else { border_chip })
+                            .bg(if active { ink_chip } else { glass_chip })
+                            .text_color(if active { ink_btn } else { ink_chip })
+                            .hover(|s| s.bg(if active { ink_chip } else { border_chip }))
+                            .child(name)
+                            .on_click(move |_, _, cx| {
+                                let value = value.clone();
+                                let lang_i = lang_i.clone();
+                                let mood_i = mood_i.clone();
+                                let _ = ent.update(cx, |this, cx| match group {
+                                    "lang" => this.set_setting(
+                                        Some(value),
+                                        mood_i.filter(|s| !s.is_empty()),
+                                        cx,
+                                    ),
+                                    _ => this.set_setting(
+                                        lang_i.filter(|s| !s.is_empty()),
+                                        Some(value),
+                                        cx,
+                                    ),
+                                });
+                            })
+                    };
+
+                    let lang_chips: Vec<_> = std::iter::once((String::new(), "Не важно".to_string()))
+                        .chain(info.languages.iter().map(|o| (o.value.clone(), o.name.clone())))
+                        .map(|(value, name)| {
+                            let active = lang.as_deref().unwrap_or_default() == value.as_str();
+                            mk_chip("lang", value, name, active, lang.clone(), mood.clone())
+                        })
+                        .collect();
+                    let mood_chips: Vec<_> = std::iter::once((String::new(), "Как всегда".to_string()))
+                        .chain(info.moods.iter().map(|o| (o.value.clone(), o.name.clone())))
+                        .map(|(value, name)| {
+                            let active = mood.as_deref().unwrap_or_default() == value.as_str();
+                            mk_chip("mood", value, name, active, lang.clone(), mood.clone())
+                        })
+                        .collect();
+
+                    v_flex()
+                        .w_full()
+                        .gap_4()
+                        .p_5()
+                        .rounded_2xl()
+                        .bg(glass)
+                        .border_1()
+                        .border_color(glass_border)
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(ink_main)
+                                .child("НАСТРОЙКИ ВОЛНЫ"),
+                        )
+                        .child(h_flex().gap_2().flex_wrap().children(lang_chips))
+                        .child(h_flex().gap_2().flex_wrap().children(mood_chips))
+                        .into_any_element()
+                }
+            };
+            Some(
+                div()
+                    .absolute()
+                    .top_16()
+                    .right_6()
+                    .w(rems(24.0))
+                    .child(card)
+                    .into_any_element(),
+            )
+        } else {
+            None
+        };
+
+        let scene = div()
+            .absolute()
+            .inset_0()
+            .child({
+                let levels = self.ctx.player.read(cx).level_state();
+                StarScene::new(
+                    levels,
+                    playing,
+                    crate::ui::visualizer::FocusPoint {
+                        fx: 0.49,
+                        fy: 0.30,
+                    },
+                )
+                .fill_color(palette.accent)
+            });
+
+        div()
             .id("wave-page")
+            .relative()
             .size_full()
             .min_w_0()
+            .overflow_hidden()
             .bg(bg)
-            .overflow_y_scrollbar()
+            .child(scene)
+            // шапка: станция слева, шестерёнка настроек справа
             .child(
-                v_flex()
-                    .w_full()
-                    .max_w(max_w)
-                    .mx_auto()
-                    .gap_10()
-                    .px_8()
-                    .pt_8()
-                    .pb_12()
+                h_flex()
+                    .absolute()
+                    .top_5()
+                    .left_6()
+                    .right_6()
+                    .justify_between()
+                    .items_center()
                     .child(
                         h_flex()
-                            .w_full()
                             .gap_3()
                             .items_center()
                             .child(
                                 div()
-                                    .size_8()
+                                    .size_7()
                                     .rounded_full()
                                     .flex()
                                     .items_center()
@@ -636,18 +629,30 @@ impl Render for WavePage {
                             )
                             .child(
                                 div()
-                                    .text_2xl()
+                                    .text_lg()
                                     .font_weight(FontWeight::EXTRA_BOLD)
                                     .text_color(ink_main)
                                     .child("Моя волна"),
                             ),
                     )
-                    .when_some(error, |this, err| this.child(StatusBanner::error(err)))
-                    .child(hero)
-                    .when_some(if in_wave { Some(settings_card) } else { None }, |this, el| {
-                        this.child(el)
-                    }),
+                    .when(in_wave, |this| this.child(gear)),
             )
+            // центр сцены: герой или заглушка
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .pt_10()
+                    .when_some(error, |this, err| {
+                        this.child(div().absolute().top_16().left_6().right_6().child(StatusBanner::error(err)))
+                    })
+                    .child(hero),
+            )
+            .when_some(settings_pop, |this, el| this.child(el))
     }
 }
 

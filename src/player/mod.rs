@@ -8,7 +8,6 @@ use std::{
     time::Duration,
 };
 
-use gpui_kit::prelude::*;
 use gpui_kit::{Context, Entity, EventEmitter, SharedString, Task, WeakEntity};
 use rodio::{DeviceSinkBuilder, MixerDeviceSink, Source as RodioSource};
 

@@ -8,7 +8,7 @@ mod stream;
 mod wave;
 
 pub use dto::*;
-pub use oauth::{DeviceCode, TokenPoll};
+pub use oauth::TokenPoll;
 
 /// Схема сырых ответов Яндекса — размытая, всё необязательное.
 mod raw {
