@@ -142,6 +142,12 @@ impl WavePage {
                 accent = c;
             }
         }
+        if top.l < 0.10 {
+            top = Hsla { l: 0.13, ..top };
+        }
+        if bottom.l < 0.10 {
+            bottom = Hsla { l: 0.15, ..bottom };
+        }
         Palette {
             top: transition(ElementId::from("wave-top"), top, slide(), window, cx),
             bottom: transition(ElementId::from("wave-bottom"), bottom, slide(), window, cx),
@@ -217,10 +223,9 @@ impl Render for WavePage {
                 .flex()
                 .items_center()
                 .justify_center()
-                .bg(palette.accent)
-                .border_2()
-                .border_color(glass_border)
-                .hover(|s| s.bg(palette.accent.opacity(0.85)))
+                .bg(ink_main)
+                .shadow_lg()
+                .hover(|s| s.bg(ink_main.opacity(0.86)))
                 .child(
                     Icon::new(if loading {
                         IconName::LoaderCircle
@@ -230,7 +235,7 @@ impl Render for WavePage {
                         IconName::Play
                     })
                     .large()
-                    .text_color(ink(palette.accent)),
+                    .text_color(ink(ink_main)),
                 )
                 .on_click(move |_, _, cx| {
                     let _ = p.update(cx, |pl, cx| pl.toggle_play(cx));
@@ -251,8 +256,8 @@ impl Render for WavePage {
 
             h_flex()
                 .w_full()
-                .gap_10()
-                .items_start()
+                .gap_8()
+                .items_center()
                 // левая колонка: светящаяся обложка + прогресс под ней
                 .child(
                     v_flex()
@@ -260,30 +265,17 @@ impl Render for WavePage {
                         .flex_shrink_0()
                         .child(
                             div()
-                                .relative()
-                                .child(
-                                    div()
-                                        .absolute()
-                                        .left_5()
-                                        .top_5()
-                                        .size_72()
-                                        .rounded_2xl()
-                                        .bg(palette.accent.opacity(0.5)),
-                                )
-                                .child(
-                                    div()
-                                        .relative()
-                                        .size_72()
-                                        .overflow_hidden()
-                                        .rounded_2xl()
-                                        .border_1()
-                                        .border_color(glass_border)
-                                        .child(Cover::new(
-                                            track.cover_url_large.clone(),
-                                            288.0,
-                                            format!("wave-hero-{id}"),
-                                        )),
-                                ),
+                                .size_72()
+                                .overflow_hidden()
+                                .rounded_2xl()
+                                .shadow_2xl()
+                                .border_1()
+                                .border_color(glass_border)
+                                .child(Cover::new(
+                                    track.cover_url_large.clone(),
+                                    288.0,
+                                    format!("wave-hero-{id}"),
+                                )),
                         )
                         .child(
                             v_flex()
@@ -295,13 +287,13 @@ impl Render for WavePage {
                                         .h_1p5()
                                         .overflow_hidden()
                                         .rounded_full()
-                                        .bg(ink_main.opacity(0.18))
+                                        .bg(ink_main.opacity(0.14))
                                         .child(
                                             div()
                                                 .h_full()
                                                 .w(rems(18.0 * pct))
                                                 .rounded_full()
-                                                .bg(palette.accent),
+                                                .bg(ink_main),
                                         ),
                                 )
                                 .child(
@@ -329,7 +321,6 @@ impl Render for WavePage {
                         .min_w_0()
                         .flex_1()
                         .gap_2()
-                        .pt_3()
                         .child(
                             div()
                                 .text_xs()
@@ -352,7 +343,7 @@ impl Render for WavePage {
                         .when_some(track.album_title.clone(), move |this, album| {
                             this.child(div().text_sm().text_color(ink_soft).child(album))
                         })
-                        .child(div().flex_1().min_h_10())
+                        .child(div().min_h_4())
                         .child(
                             h_flex()
                                 .gap_4()
@@ -373,7 +364,7 @@ impl Render for WavePage {
                                     Button::new(format!("wave-like-{id}"))
                                         .ghost()
                                         .bg(glass)
-                                        .text_color(if liked { palette.accent } else { ink_main })
+                                        .text_color(ink_main)
                                         .icon(if liked {
                                             IconName::Heart
                                         } else {
