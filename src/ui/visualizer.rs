@@ -1,60 +1,58 @@
-//! Текучая лента-волна — «как в Яндекс Музыке»: не полоски эквалайзера, а
-//! живой заполненный синусоидальный поток, чья амплитуда дышит от уровня
-//! музыки. Два слоя бегут с разной скоростью; когда трек на паузе, лента
-//! остаётся едва заметной рябью — экран не «умирает».
+//! Звезда по центру, которая ебашит в бит.
+//!
+//! Форма — четырёхконечная «искра» (как в стикерах ЯМ): r(θ) с острыми
+//! лучами; на каждом бите (он-сет-детектор в player::tap) звезда получает
+//! удар: резкий выброс масштаба и длины лучей, затем экспоненциальное
+//! затухание огибающей. Фоном — мягкое свечение, дышащее от баса.
 
 use std::sync::Arc;
 
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    px, App, Bounds, Element, ElementId, GlobalElementId, Hsla, InspectorElementId, IntoElement,
-    LayoutId, PathBuilder, Pixels, Style, Window, point, relative,
+    linear_color_stop, linear_gradient, px, App, Bounds, Element, ElementId, GlobalElementId,
+    Hsla, InspectorElementId, IntoElement, LayoutId, PathBuilder, Pixels, Style, Window, point,
+    relative,
 };
 
 use crate::player::tap::LevelState;
 
-/// Значение полос уровня → амплитуда ленты. Элемент-описание, состояние
-/// живёт в атомиках аудио-цепи.
-pub struct FlowRibbon {
+pub struct BeatStar {
     levels: Option<Arc<LevelState>>,
     playing: bool,
-    fill: Option<Hsla>,
-    highlight: bool,
-    amp: f32,
-    speed: f32,
+    color: Option<Hsla>,
+    spin: f32,
+    kick: f32,
     id: ElementId,
 }
 
-impl FlowRibbon {
-    /// hero-волна под обложкой: крупная, двухслойная.
+impl BeatStar {
+    /// Большая звезда на странице волны.
     pub fn hero(levels: Arc<LevelState>, playing: bool) -> Self {
         Self {
             levels: Some(levels),
             playing,
-            fill: None,
-            highlight: true,
-            amp: 16.0,
-            speed: 0.85,
-            id: ElementId::Name("flow-ribbon-hero".into()),
+            color: None,
+            spin: 0.22,
+            kick: 0.6,
+            id: ElementId::Name("beat-star-hero".into()),
         }
     }
 
-    /// мини-лента в плеер-баре.
+    /// Мини-звезда в плеер-баре.
     pub fn mini(levels: Option<Arc<LevelState>>, playing: bool) -> Self {
         Self {
             levels,
             playing,
-            fill: None,
-            highlight: false,
-            amp: 5.0,
-            speed: 1.6,
-            id: ElementId::Name("flow-ribbon-mini".into()),
+            color: None,
+            spin: 0.5,
+            kick: 0.45,
+            id: ElementId::Name("beat-star-mini".into()),
         }
     }
 
     pub fn fill_color(mut self, color: Hsla) -> Self {
-        self.fill = Some(color);
+        self.color = Some(color);
         self
     }
 
@@ -64,14 +62,14 @@ impl FlowRibbon {
     }
 }
 
-impl IntoElement for FlowRibbon {
+impl IntoElement for BeatStar {
     type Element = Self;
     fn into_element(self) -> Self::Element {
         self
     }
 }
 
-impl Element for FlowRibbon {
+impl Element for BeatStar {
     type RequestLayoutState = ();
     type PrepaintState = ();
 
@@ -93,7 +91,6 @@ impl Element for FlowRibbon {
         let mut style = Style::default();
         style.size.width = relative(1.).into();
         style.size.height = relative(1.).into();
-
         (window.request_layout(style, None, cx), ())
     }
 
@@ -119,79 +116,136 @@ impl Element for FlowRibbon {
         window: &mut Window,
         cx: &mut App,
     ) {
-        // f32 на абсолютных секундах эпохи теряет суб-секундную точность
-        // (квант ~128 с) — фазу снимаем по модулю и только потом в f32
+        let base_color = self.color.unwrap_or_else(|| cx.theme().primary);
+
+        // время: f64 → по модулю → f32 (в f32 эпоха теряет дробную часть)
         let secs = std::time::UNIX_EPOCH
             .elapsed()
             .map(|d| d.as_secs_f64())
             .unwrap_or_default();
-        let t = ((secs % 1000.0) as f32) * self.speed;
+        let t = ((secs % 1000.0) as f32) * self.spin;
+        let now_ms = (secs * 1000.0) as u64;
 
-        let (mut a_bass, mut a_mid, mut a_high) = (0f32, 0f32, 0f32);
-        if let Some(levels) = self.levels.as_ref() {
+        let mut bass = 0f32;
+        let mut env = 0f32; // огибающая удара 0..1
+        if let Some(state) = self.levels.as_ref() {
             if self.playing {
-                a_bass = levels.band(0);
-                a_mid = levels.band(2);
-                a_high = levels.band(4);
+                bass = state.band(0);
+                let (_seq, strength, at_ms) = state.beat();
+                if at_ms > 0 && now_ms > at_ms {
+                    let dt = (now_ms - at_ms).min(500) as f32;
+                    env = strength * (-dt * 0.010).exp(); // τ ≈ 100 мс
+                }
             }
         }
-        // амплитуды слоёв: бас — большая медленная волна, середина и верх — рябь
-        let amp = self.amp;
-        let layers = if self.highlight { 2 } else { 1 };
-        let base_fill = self
-            .fill
-            .unwrap_or_else(|| cx.theme().primary);
 
         let w = f32::from(bounds.size.width);
         let h = f32::from(bounds.size.height);
-        let mid = h * 0.52;
-        let ox = f32::from(bounds.origin.x);
-        let oy = f32::from(bounds.origin.y);
-        let steps = 96usize;
+        let center = bounds.center();
+        let ox = f32::from(center.x);
+        let oy = f32::from(center.y);
 
-        for layer in 0..layers {
-            let (s1, s2, s3, ph) = match layer {
-                0 => (0.011, 0.026, 0.052, 0.0),
-                _ => (0.016, 0.038, 0.071, 2.4),
+        let base_r = 0.5 * w.min(h) * 0.86;
+        let scale = (0.94 + 0.10 * bass) * (1.0 + self.kick * env);
+        let r_main = base_r * scale;
+        // в покое — острые тонкие лучи; на ударе распухают и удлиняются
+        let spike_pow = 3.0 - 1.3 * env;
+        let core = 0.13 + 0.22 * env;
+        let arms = 2.0f32; // |cos(2θ)| даёт 4 луча
+
+        // 1) мягкое свечение позади
+        let glow_r = r_main * (1.25 + 0.5 * env);
+        let mut glow = PathBuilder::fill();
+        let gsteps = 48;
+        for i in 0..=gsteps {
+            let a = std::f32::consts::TAU * (i as f32 / gsteps as f32);
+            let wob = 1.0 + 0.06 * (a * 3.0 + t * 2.0).sin();
+            let x = ox + glow_r * wob * a.cos();
+            let y = oy + glow_r * wob * a.sin();
+            if i == 0 {
+                glow.move_to(point(px(x), px(y)));
+            } else {
+                glow.line_to(point(px(x), px(y)));
+            }
+        }
+        glow.close();
+        if let Ok(path) = glow.build() {
+            window.paint_path(path, base_color.opacity(0.10 + 0.30 * env + 0.06 * bass));
+        }
+
+        // 2) сама звезда
+        let steps = 160;
+        let mut star = PathBuilder::fill();
+        for i in 0..=steps {
+            let a = std::f32::consts::TAU * (i as f32 / steps as f32);
+            let spike = (arms * (a + t)).cos().abs().powf(spike_pow);
+            let wobble = 1.0 + 0.02 * (4.0 * a + t).sin();
+            let r = r_main * (core + (1.0 - core) * spike) * wobble;
+            let x = ox + r * a.cos();
+            let y = oy + r * a.sin();
+            if i == 0 {
+                star.move_to(point(px(x), px(y)));
+            } else {
+                star.line_to(point(px(x), px(y)));
+            }
+        }
+        star.close();
+        if let Ok(path) = star.build() {
+            let light = Hsla {
+                h: base_color.h,
+                s: base_color.s * 0.75,
+                l: (base_color.l + 0.45).min(0.98),
+                a: 1.0,
             };
-            let amp1 = amp * (0.35 + 0.65 * a_bass);
-            let amp2 = amp * (0.12 + 0.35 * a_mid);
-            let amp3 = amp * (0.05 + 0.22 * a_high);
-
-            let mut pb = PathBuilder::fill();
-            for i in 0..=steps {
-                let x = w * (i as f32 / steps as f32);
-                let y = mid
-                    + (x * s1 + t + ph).sin() * amp1
-                    + (x * s2 - t * 1.7 + ph).sin() * amp2
-                    + (x * s3 + t * 2.6).sin() * amp3;
-                let p = point(px(ox + x), px(oy + y));
-                if i == 0 {
-                    pb.move_to(p);
-                } else {
-                    pb.line_to(p);
-                }
-            }
-            pb.line_to(point(px(ox + w), px(oy + h)));
-            pb.line_to(point(px(ox), px(oy + h)));
-            pb.close();
-            if let Ok(path) = pb.build() {
-                let color = if layer == 0 {
-                    base_fill
-                } else {
-                    Hsla {
-                        h: base_fill.h,
-                        s: base_fill.s * 0.6,
-                        l: (base_fill.l + 0.42).min(0.97),
-                        a: 1.0,
-                    }
-                };
-                let opacity = if layer == 0 { 0.92 } else { 0.28 };
-                window.paint_path(path, color.opacity(opacity));
-            }
+            // на пике удара — засветленная верхняя половина градиента
+            let top = if env > 0.4 { light } else { base_color };
+            window.paint_path(
+                path,
+                linear_gradient(
+                    120.0,
+                    linear_color_stop(top, 0.0),
+                    linear_color_stop(base_color.opacity(0.9), 1.0),
+                ),
+            );
         }
 
         window.request_animation_frame();
     }
 }
 
+#[cfg(test)]
+mod beat_tests {
+    use super::*;
+    use crate::player::tap::LevelTap;
+    use std::num::{NonZeroU16, NonZeroU32};
+
+    /// Посылка баса после затишья → как минимум один «удар».
+    #[test]
+    fn onset_pulse_is_detected() {
+        let rate = 44100usize;
+        let mut data: Vec<f32> = Vec::new();
+        // 1.5 с тишины-шума, затем жирный басовый удар
+        for _ in 0..rate * 3 / 2 {
+            data.push(0.01);
+            data.push(0.01);
+        }
+        for i in 0..rate / 2 {
+            let t = i as f32 / rate as f32;
+            let s = 0.95 * (2.0 * std::f32::consts::PI * 70.0 * t).sin();
+            data.push(s);
+            data.push(s);
+        }
+        let state = Arc::new(LevelState::new());
+        let inner = rodio::buffer::SamplesBuffer::new(
+            NonZeroU16::new(2).unwrap(),
+            NonZeroU32::new(rate as u32).unwrap(),
+            data,
+        );
+        let mut tap = LevelTap::new(inner, Arc::clone(&state));
+        while tap.next().is_some() {}
+        tap.push_block();
+        let (seq, strength, at_ms) = state.beat();
+        assert!(seq >= 1, "удар не пойман: seq={seq}");
+        assert!(strength > 0.2 && at_ms > 0, "сила/время не записаны");
+    }
+}

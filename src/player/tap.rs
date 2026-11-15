@@ -4,7 +4,7 @@
 //! дёшевы для аудио-потока и дают живые «полоски».
 
 use std::sync::{
-    atomic::{AtomicU32, Ordering},
+    atomic::{AtomicU32, AtomicU64, Ordering},
     Arc,
 };
 
@@ -20,15 +20,21 @@ const CUTOFFS: [f32; BANDS - 1] = [120.0, 400.0, 900.0, 1800.0, 3500.0];
 const GAIN: [f32; BANDS] = [1.0, 1.6, 2.4, 3.4, 4.6, 6.0];
 const BLOCK: usize = 128;
 
-/// Общее состояние уровней для DSP-потока и UI.
+/// Общее состояние уровней и бит-детектора для DSP-потока и UI.
 pub struct LevelState {
     bands: [AtomicU32; BANDS],
+    beat_seq: AtomicU64,
+    beat_strength: AtomicU32,
+    beat_at_ms: AtomicU64,
 }
 
 impl LevelState {
     pub(crate) fn new() -> Self {
         Self {
             bands: std::array::from_fn(|_| AtomicU32::new(0)),
+            beat_seq: AtomicU64::new(0),
+            beat_strength: AtomicU32::new(0),
+            beat_at_ms: AtomicU64::new(0),
         }
     }
 
@@ -40,6 +46,16 @@ impl LevelState {
         for b in &self.bands {
             b.store(0, Ordering::Relaxed);
         }
+        self.beat_strength.store(0, Ordering::Relaxed);
+    }
+
+    /// (номер бита, сила 0..1, unix-мс удара) — UI сам строит огибающую.
+    pub fn beat(&self) -> (u64, f32, u64) {
+        (
+            self.beat_seq.load(Ordering::Relaxed),
+            f32::from_bits(self.beat_strength.load(Ordering::Relaxed)),
+            self.beat_at_ms.load(Ordering::Relaxed),
+        )
     }
 }
 
@@ -57,6 +73,8 @@ where
     /// [канал][фильтр]: 0..4 — lowpass по границам, 5..9 — highpass
     filters: Vec<Vec<Biquad>>,
     sum: [f64; BANDS],
+    bass_slow: f32,
+    blocks_since_beat: usize,
 }
 
 impl<I: RodioSource<Item = f32>> LevelTap<I> {
@@ -72,6 +90,8 @@ impl<I: RodioSource<Item = f32>> LevelTap<I> {
             rate,
             filters: Vec::new(),
             sum: [0.0; BANDS],
+            bass_slow: 0.0,
+            blocks_since_beat: usize::MAX / 2,
         }
     }
 
@@ -100,7 +120,7 @@ impl<I: RodioSource<Item = f32>> LevelTap<I> {
             .collect();
     }
 
-    fn push_block(&mut self) {
+    pub(crate) fn push_block(&mut self) {
         let n = self.frames.max(1) as f64;
         for b in 0..BANDS {
             let rms = (self.sum[b] / n).sqrt() as f32;
@@ -109,8 +129,30 @@ impl<I: RodioSource<Item = f32>> LevelTap<I> {
             let v = (rms * GAIN[b]).clamp(0.0, 1.0).max(prev * 0.88);
             self.state.bands[b].store(v.to_bits(), Ordering::Relaxed);
         }
+        self.detect_beat();
         self.sum = [0.0; BANDS];
         self.frames = 0;
+    }
+
+    /// Он-сет по басовой энергии: всплеск относительно медленного среднего.
+    fn detect_beat(&mut self) {
+        let bass = (self.sum[0] / BLOCK.max(1) as f64).sqrt() as f32;
+        // окно ~1.5 с на 128-кадровых блоках (~2.9 мс)
+        self.bass_slow = self.bass_slow * 0.995 + bass * 0.005;
+        self.blocks_since_beat += 1;
+        let min_gap = 40; // ~120 мс между ударами
+        if bass > self.bass_slow * 1.5 + 0.015 && self.blocks_since_beat >= min_gap {
+            let strength = ((bass - self.bass_slow) * 6.0).clamp(0.25, 1.0);
+            self.bass_slow = self.bass_slow.max(bass * 0.55); // не даём серии ложных
+            self.blocks_since_beat = 0;
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or_default();
+            self.state.beat_at_ms.store(now_ms, Ordering::Relaxed);
+            self.state.beat_strength.store(strength.to_bits(), Ordering::Relaxed);
+            self.state.beat_seq.fetch_add(1, Ordering::Relaxed);
+        }
     }
 }
 

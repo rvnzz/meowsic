@@ -30,7 +30,7 @@ use library::LibraryPage;
 use list_page::ListPage;
 use search::SearchPage;
 use settings::SettingsPage;
-use visualizer::FlowRibbon;
+use visualizer::BeatStar;
 use wave::WavePage;
 use widgets::{Cover, fmt_count, fmt_ms};
 
@@ -741,10 +741,10 @@ impl MusicApp {
                     .when_some(track_block, |this, el| this.child(el))
                     .child(
                         div()
-                            .w_12()
-                            .h_6()
+                            .w_9()
+                            .h_9()
                             .flex_shrink_0()
-                            .child(FlowRibbon::mini(
+                            .child(BeatStar::mini(
                                 Some(self.player.read(cx).level_state()),
                                 playing,
                             )),

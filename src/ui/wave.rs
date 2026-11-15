@@ -12,7 +12,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::{Load, MY_WAVE_STATION, PageCtx, parse_hex};
-use crate::ui::visualizer::FlowRibbon;
+use crate::ui::visualizer::BeatStar;
 use crate::ui::widgets::{Cover, StatusBanner};
 use crate::yandex::{StationInfoDto, TrackDto};
 
@@ -318,10 +318,11 @@ impl Render for WavePage {
                         .child(
                             div()
                                 .w_72()
-                                .h_20()
+                                .h_48()
+                                .items_center()
                                 .child({
                                     let levels = self.ctx.player.read(cx).level_state();
-                                    FlowRibbon::hero(levels, playing).fill_color(palette.accent)
+                                    BeatStar::hero(levels, playing).fill_color(palette.accent)
                                 }),
                         ),
                 )
