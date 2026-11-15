@@ -3,6 +3,7 @@ pub mod library;
 pub mod list_page;
 pub mod search;
 pub mod settings;
+pub mod visualizer;
 pub mod wave;
 pub mod widgets;
 
@@ -29,6 +30,7 @@ use library::LibraryPage;
 use list_page::ListPage;
 use search::SearchPage;
 use settings::SettingsPage;
+use visualizer::Visualizer;
 use wave::WavePage;
 use widgets::{Cover, fmt_count, fmt_ms};
 
@@ -102,6 +104,7 @@ pub struct MusicApp {
     lyrics_track: Option<String>,
     lyrics_active: Option<usize>,
 
+    viz_mini: Entity<Visualizer>,
     focus: FocusHandle,
     on_player_state_pending: bool,
     _subs: Vec<Subscription>,
@@ -141,6 +144,7 @@ impl MusicApp {
                 .default_value(settings.volume)
         });
         let home = cx.new(|cx| HomePage::new(ctx.clone(), cx));
+        let viz_mini = cx.new(|cx| Visualizer::new(player.clone(), 5, 22.0, cx));
 
         let mut this = Self {
             store: store.clone(),
@@ -163,6 +167,7 @@ impl MusicApp {
             lyrics: Load::Idle,
             lyrics_track: None,
             lyrics_active: None,
+            viz_mini,
             focus: cx.focus_handle(),
             on_player_state_pending: false,
             _subs: Vec::new(),
@@ -736,7 +741,14 @@ impl MusicApp {
                                     ),
                             ),
                     )
-                    .when_some(track_block, |this, el| this.child(el)),
+                    .when_some(track_block, |this, el| this.child(el))
+                    .child(
+                        div()
+                            .w_12()
+                            .h_6()
+                            .flex_shrink_0()
+                            .child(self.viz_mini.clone()),
+                    ),
             )
             // центр: транспорт и прогресс
             .child(

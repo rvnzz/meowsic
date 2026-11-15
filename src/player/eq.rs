@@ -6,7 +6,7 @@ use rodio::{ChannelCount, SampleRate, Source};
 const Q: f32 = 1.1;
 
 #[derive(Clone, Copy)]
-struct Biquad {
+pub(crate) struct Biquad {
     b0: f64,
     b1: f64,
     b2: f64,
@@ -41,7 +41,47 @@ impl Biquad {
         }
     }
 
-    fn process(&mut self, x: f32) -> f32 {
+    /// Butterworth lowpass Q=0.707.
+    pub(crate) fn lowpass(freq: f32, sample_rate: u32) -> Self {
+        let w0 = 2.0 * std::f64::consts::PI * freq as f64 / sample_rate as f64;
+        let (sin, cos) = (w0.sin(), w0.cos());
+        let alpha = sin / (2.0 * 0.7071068);
+        let a0 = 1.0 + alpha;
+        Self {
+            b0: (1.0 - cos) / 2.0 / a0,
+            b1: (1.0 - cos) / a0,
+            b2: (1.0 - cos) / 2.0 / a0,
+            a1: -2.0 * cos / a0,
+            a2: (1.0 - alpha) / a0,
+            x1: 0.0, x2: 0.0, y1: 0.0, y2: 0.0,
+        }
+    }
+
+    /// Butterworth highpass Q=0.707.
+    pub(crate) fn highpass(freq: f32, sample_rate: u32) -> Self {
+        let w0 = 2.0 * std::f64::consts::PI * freq as f64 / sample_rate as f64;
+        let (sin, cos) = (w0.sin(), w0.cos());
+        let alpha = sin / (2.0 * 0.7071068);
+        let a0 = 1.0 + alpha;
+        Self {
+            b0: (1.0 + cos) / 2.0 / a0,
+            b1: -(1.0 + cos) / a0,
+            b2: (1.0 + cos) / 2.0 / a0,
+            a1: -2.0 * cos / a0,
+            a2: (1.0 - alpha) / a0,
+            x1: 0.0, x2: 0.0, y1: 0.0, y2: 0.0,
+        }
+    }
+
+    /// Сбрасывает состояние (историю вход/выход), оставляя коэффициенты.
+    pub(crate) fn reset(&mut self) {
+        self.x1 = 0.0;
+        self.x2 = 0.0;
+        self.y1 = 0.0;
+        self.y2 = 0.0;
+    }
+
+    pub(crate) fn process(&mut self, x: f32) -> f32 {
         let xf = x as f64;
         let y = self.b0 * xf + self.b1 * self.x1 + self.b2 * self.x2
             - self.a1 * self.y1

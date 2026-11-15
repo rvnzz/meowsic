@@ -1,4 +1,5 @@
 mod eq;
+pub mod tap;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -9,12 +10,14 @@ use std::{
 
 use gpui_kit::prelude::*;
 use gpui_kit::{Context, Entity, EventEmitter, SharedString, Task, WeakEntity};
-use rodio::{DeviceSinkBuilder, MixerDeviceSink};
+use rodio::{DeviceSinkBuilder, MixerDeviceSink, Source as RodioSource};
 
 use crate::store::{Quality, SavedSession, Store};
 use crate::yandex::{TrackDto, WaveResponse, Yandex};
 
 use eq::EqSource;
+pub use tap::LevelState;
+use tap::LevelTap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RepeatMode {
@@ -96,6 +99,7 @@ pub struct Player {
     gen: usize,
 
     started: bool,
+    levels: Arc<LevelState>,
     tick: Option<Task<()>>,
     sleep_task: Task<()>,
     last_session_save: std::time::Instant,
@@ -128,6 +132,7 @@ impl Player {
             downloads: HashMap::new(),
             inflight: HashSet::new(),
             wave_refresh: false,
+            levels: Arc::new(LevelState::new()),
             gen: 0,
             started: false,
             tick: None,
@@ -506,6 +511,7 @@ impl Player {
     }
 
     fn stop_internal(&mut self, cx: &mut Context<Self>) {
+        self.levels.zero();
         if let Some(rodio) = self.rodio.as_ref() {
             rodio.stop();
         }
@@ -561,6 +567,10 @@ impl Player {
             }
         }
         self.emit_state(cx);
+    }
+
+    pub fn level_state(&self) -> Arc<LevelState> {
+        Arc::clone(&self.levels)
     }
 
     pub fn set_uid(&mut self, uid: i64) {
@@ -640,13 +650,13 @@ impl Player {
         let use_eq = self.eq_enabled && self.eq_gains.iter().any(|g| g.abs() > 0.01);
         let rodio = self.rodio.as_ref().expect("rodio just created");
         rodio.stop();
-        if use_eq {
+        let tapped: Box<dyn RodioSource<Item = f32> + Send> = if use_eq {
             let gains = self.eq_gains.clone();
-            let src = EqSource::new(decoder, &crate::store::EQ_FREQUENCIES, &gains);
-            rodio.append(src);
+            Box::new(EqSource::new(decoder, &crate::store::EQ_FREQUENCIES, &gains))
         } else {
-            rodio.append(decoder);
-        }
+            Box::new(decoder)
+        };
+        rodio.append(LevelTap::new(tapped, Arc::clone(&self.levels)));
         rodio.set_volume(self.volume);
         if from_ms > 0 {
             let _ = rodio.try_seek(Duration::from_millis(from_ms as u64));
