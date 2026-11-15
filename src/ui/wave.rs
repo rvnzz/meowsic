@@ -430,52 +430,75 @@ impl Render for WavePage {
         } else {
             v_flex()
                 .w_full()
-                .items_center()
-                .gap_6()
-                .py_16()
+                .justify_center()
+                .py_10()
                 .child(
                     div()
-                        .relative()
-                        .size_56()
+                        .mx_auto()
+                        .w_full()
+                        .max_w(rems(28.0))
                         .child(
-                            div()
-                                .absolute()
-                                .left_6()
-                                .top_6()
-                                .size_56()
-                                .rounded_full()
-                                .bg(palette.accent.opacity(0.4)),
-                        )
-                        .child(
-                            div()
-                                .size_56()
-                                .rounded_full()
-                                .flex()
+                            v_flex()
+                                .w_full()
                                 .items_center()
-                                .justify_center()
-                                .border_2()
+                                .gap_4()
+                                .px_8()
+                                .py_10()
+                                .rounded_2xl()
+                                .bg(glass)
+                                .border_1()
                                 .border_color(glass_border)
-                                .child(Icon::new(IconName::Radio).large().text_color(ink_main)),
+                                .child(
+                                    div()
+                                        .size_12()
+                                        .rounded_full()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .bg(palette.accent.opacity(0.16))
+                                        .border_1()
+                                        .border_color(palette.accent.opacity(0.5))
+                                        .child(
+                                            Icon::new(IconName::Radio)
+                                                .small()
+                                                .text_color(palette.accent),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .text_xl()
+                                        .font_weight(FontWeight::BOLD)
+                                        .text_color(ink_main)
+                                        .child("Волна остановлена"),
+                                )
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_center()
+                                        .text_color(ink_soft)
+                                        .child(
+                                            "Персональный поток, который подстраивается \nпод твои лайки и дизлайки с каждой песней",
+                                        ),
+                                )
+                                .child(
+                                    Button::new("wave-start")
+                                        .primary()
+                                        .large()
+                                        .icon(IconName::Play)
+                                        .label("Запустить мою волну")
+                                        .on_click(cx.listener({
+                                            let p = entity_player.clone();
+                                            move |_, _, _, cx| {
+                                                let _ = p.update(cx, |pl, cx| {
+                                                    pl.start_wave(MY_WAVE_STATION, "Моя волна", cx)
+                                                });
+                                            }
+                                        })),
+                                ),
                         ),
                 )
-                .child(div().text_xl().text_color(ink_main).child("Волна остановлена"))
-                .child(
-                    Button::new("wave-start")
-                        .primary()
-                        .large()
-                        .icon(IconName::Play)
-                        .label("Запустить мою волну")
-                        .on_click(cx.listener({
-                            let p = entity_player.clone();
-                            move |_, _, _, cx| {
-                                let _ = p.update(cx, |pl, cx| {
-                                    pl.start_wave(MY_WAVE_STATION, "Моя волна", cx)
-                                });
-                            }
-                        })),
-                )
                 .into_any_element()
-        };
+                };
 
         let settings_card: AnyElement = match &self.info {
             Load::Idle | Load::Loading => {
