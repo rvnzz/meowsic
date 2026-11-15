@@ -20,12 +20,25 @@ impl Yandex {
         };
         let result = self.post_value(&path, body).await?;
         let parsed: YRotorSession =
-            serde_json::from_value(result).map_err(|e| ApiError::Msg(e.to_string()))?;
-        let tracks = parsed
-            .sequence
+            serde_json::from_value(result.clone()).map_err(|e| ApiError::Msg(e.to_string()))?;
+        // derivedColors живёт в сыром JSON последовательности — маппим из него
+        let sequence = result
+            .get("sequence")
+            .and_then(|s| s.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let tracks: Vec<TrackDto> = sequence
             .iter()
-            .filter_map(|w| w.track.as_ref())
-            .map(map_track)
+            .filter_map(|item| item.get("track"))
+            .filter_map(|raw| serde_json::from_value::<YTrack>(raw.clone()).ok())
+            .enumerate()
+            .map(|(ix, t)| {
+                let mut track = map_track(&t);
+                if let Some(raw) = sequence.get(ix).and_then(|s| s.get("track")) {
+                    crate::yandex::dto::set_derived_colors_pub(&mut track, raw);
+                }
+                track
+            })
             .collect();
         Ok(WaveResponse {
             station_id: station.to_string(),

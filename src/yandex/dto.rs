@@ -21,6 +21,14 @@ pub struct TrackDto {
     pub duration_ms: Option<i64>,
     pub available: bool,
     pub explicit: bool,
+    /// derivedColors из ответа Яндекса: градиент обложки и акцент — для
+    /// «живого» фона страницы волны.
+    #[serde(default)]
+    pub color_from: Option<String>,
+    #[serde(default)]
+    pub color_to: Option<String>,
+    #[serde(default)]
+    pub color_accent: Option<String>,
 }
 
 impl TrackDto {
@@ -189,7 +197,30 @@ pub(crate) fn map_track(t: &YTrack) -> TrackDto {
         duration_ms: t.duration_ms,
         available: t.available.unwrap_or(true),
         explicit: t.content_warning.is_some(),
+        color_from: None,
+        color_to: None,
+        color_accent: None,
     }
+}
+
+/// derivedColors у сырого трека нет в типизированной схеме — вытаскиваем
+/// отдельно из JSON рядом с map_track.
+pub(crate) fn set_derived_colors_pub(track: &mut TrackDto, raw: &serde_json::Value) {
+    let Some(dc) = raw.get("derivedColors") else { return };
+    let hex_at = |ix: usize| -> Option<String> {
+        dc.get("gradient")
+            .and_then(|g| g.get(ix))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    };
+    track.color_from = hex_at(0);
+    track.color_to = hex_at(2).or_else(|| hex_at(1));
+    track.color_accent = dc
+        .get("vibrant")
+        .or_else(|| dc.get("prominent"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| hex_at(1));
 }
 
 pub(crate) fn map_album_brief(a: &YAlbum) -> AlbumBriefDto {
@@ -204,7 +235,11 @@ pub(crate) fn map_album_brief(a: &YAlbum) -> AlbumBriefDto {
 pub(crate) fn map_tracks(items: &[serde_json::Value]) -> Vec<TrackDto> {
     items
         .iter()
-        .filter_map(|raw| serde_json::from_value::<YTrack>(raw.clone()).ok())
-        .map(|t| map_track(&t))
+        .filter_map(|raw| {
+            let parsed = serde_json::from_value::<YTrack>(raw.clone()).ok()?;
+            let mut track = map_track(&parsed);
+            set_derived_colors_pub(&mut track, raw);
+            Some(track)
+        })
         .collect()
 }
